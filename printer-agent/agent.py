@@ -38,12 +38,7 @@ def db(method, path, **kwargs):
 
 
 def download_pdf(path):
-    """Download the private Storage object using the agent's service key.
-
-    This avoids depending on signed-URL behavior and works with objects stored
-    under paths such as public/<uuid>-<filename>. The service key never leaves
-    the local printer agent.
-    """
+    """Download the private Storage object using the agent's service key."""
     clean_path = path.lstrip('/')
     r = requests.get(
         f'{URL}/storage/v1/object/print-files/{clean_path}',
@@ -65,6 +60,48 @@ def find_sumatra():
     return next((str(p) for p in candidates if p.is_file()), None)
 
 
+def print_with_windows_shell(path):
+    """Print a PDF using the Windows shell when SumatraPDF is unavailable."""
+    ps_path = path.replace("'", "''")
+    printer = PRINTER.replace("'", "''")
+    command = f"""
+$ErrorActionPreference = 'Stop'
+$path = '{ps_path}'
+$printer = '{printer}'
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = $path
+$psi.UseShellExecute = $true
+$verbs = @($psi.Verbs)
+
+if ($verbs -contains 'PrintTo') {{
+    $p = Start-Process -LiteralPath $path -Verb PrintTo -ArgumentList ('"' + $printer + '"') -PassThru
+    if (-not $p) {{ throw 'Windows PDF handler could not start PrintTo.' }}
+}} elseif ($verbs -contains 'Print') {{
+    $network = New-Object -ComObject WScript.Network
+    $oldDefault = (Get-CimInstance Win32_Printer | Where-Object {{ $_.Default }} | Select-Object -First 1 -ExpandProperty Name)
+    try {{
+        $network.SetDefaultPrinter($printer)
+        $p = Start-Process -LiteralPath $path -Verb Print -PassThru
+        if (-not $p) {{ throw 'Windows PDF handler could not start Print.' }}
+    }} finally {{
+        if ($oldDefault) {{ $network.SetDefaultPrinter($oldDefault) }}
+    }}
+}} else {{
+    throw ('The installed PDF application does not provide Print or PrintTo. Available verbs: ' + ($verbs -join ', '))
+}}
+""".strip()
+    result = subprocess.run(
+        ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or 'Windows shell printing failed').strip()
+        raise RuntimeError(detail[:1000])
+    time.sleep(PRINT_WAIT)
+
+
 def print_pdf(pdf, copies):
     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
         f.write(pdf)
@@ -80,17 +117,9 @@ def print_pdf(pdf, copies):
                     timeout=120,
                 )
             else:
-                ps_path = p.replace("'", "''")
-                command = (
-                    f"$p=Start-Process -LiteralPath '{ps_path}' -Verb Print -PassThru -Wait; "
-                    f"if (-not $p) {{ exit 1 }}"
-                )
-                subprocess.run(
-                    ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', command],
-                    check=True,
-                    timeout=120,
-                )
-                time.sleep(PRINT_WAIT)
+                if copies != 1:
+                    print('Windows shell fallback does not reliably control PDF copies; install SumatraPDF for copy-count support.')
+                print_with_windows_shell(p)
         else:
             subprocess.run(
                 ['lp', '-d', PRINTER, '-n', str(copies), p],
@@ -107,7 +136,7 @@ def print_pdf(pdf, copies):
 def main():
     print(f'Printer agent online: {PRINTER}')
     if platform.system() == 'Windows' and not find_sumatra():
-        print('Windows print fallback active. For most reliable printing, install SumatraPDF or set SUMATRA_PDF in .env.')
+        print('Windows shell fallback active. For reliable PDF printing and copy counts, install SumatraPDF or set SUMATRA_PDF in .env.')
 
     while True:
         try:
