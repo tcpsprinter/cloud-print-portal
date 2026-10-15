@@ -250,7 +250,8 @@ def main():
                 if not claimed:
                     continue
                 try:
-                    pdf = download_pdf(job['file_path'])
+                    original = download_pdf(job['file_path'])
+                    pdf = convert_to_pdf(original, job.get('file_name') or job['file_path'])
                     print_pdf(pdf, int(job.get('copies') or 1))
                     db(
                         'PATCH',
