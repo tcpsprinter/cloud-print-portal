@@ -1,0 +1,45 @@
+name: Build Windows Printer Agent
+
+on:
+  push:
+    paths:
+      - 'printer-agent/**'
+      - '.github/workflows/build-printer-agent.yml'
+  workflow_dispatch:
+
+jobs:
+  build-windows-agent:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r printer-agent/requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        run: |
+          pyinstaller --onefile --name CloudPrintAgent --clean printer-agent/agent.py
+
+      - name: Prepare package
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item dist/CloudPrintAgent.exe package/CloudPrintAgent.exe
+          Copy-Item printer-agent/.env.example package/.env.example
+          Copy-Item printer-agent/README.md package/README.md
+
+      - name: Upload Windows agent
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudPrintAgent-Windows
+          path: package/
+          if-no-files-found: error
