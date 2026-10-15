@@ -3,7 +3,8 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-ENV_FILE = Path(__file__).resolve().parent / '.env'
+APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
+ENV_FILE = APP_DIR / '.env'
 load_dotenv(ENV_FILE)
 
 
