@@ -238,7 +238,7 @@ def main():
         try:
             jobs = db(
                 'GET',
-                'print_jobs?select=id,file_path,copies&status=eq.approved&order=created_at.asc&limit=1',
+                'print_jobs?select=id,file_path,file_name,copies&status=eq.approved&order=created_at.asc&limit=1',
             ) or []
             for job in jobs:
                 jid = job['id']
