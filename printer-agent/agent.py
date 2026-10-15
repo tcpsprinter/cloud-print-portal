@@ -74,14 +74,14 @@ $psi.UseShellExecute = $true
 $verbs = @($psi.Verbs)
 
 if ($verbs -contains 'PrintTo') {{
-    $p = Start-Process -LiteralPath $path -Verb PrintTo -ArgumentList ('"' + $printer + '"') -PassThru
+    $p = Start-Process -FilePath $path -Verb PrintTo -ArgumentList ('"' + $printer + '"') -PassThru
     if (-not $p) {{ throw 'Windows PDF handler could not start PrintTo.' }}
 }} elseif ($verbs -contains 'Print') {{
     $network = New-Object -ComObject WScript.Network
     $oldDefault = (Get-CimInstance Win32_Printer | Where-Object {{ $_.Default }} | Select-Object -First 1 -ExpandProperty Name)
     try {{
         $network.SetDefaultPrinter($printer)
-        $p = Start-Process -LiteralPath $path -Verb Print -PassThru
+        $p = Start-Process -FilePath $path -Verb Print -PassThru
         if (-not $p) {{ throw 'Windows PDF handler could not start Print.' }}
     }} finally {{
         if ($oldDefault) {{ $network.SetDefaultPrinter($oldDefault) }}
