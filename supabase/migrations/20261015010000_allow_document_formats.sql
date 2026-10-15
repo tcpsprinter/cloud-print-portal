@@ -22,7 +22,7 @@ begin
     raise exception 'Name is required';
   end if;
 
-  if coalesce(p_file_name, '') !~* '\.(pdf|doc|docx|odt|rtf|txt|xls|xlsx|ods|csv|ppt|pptx|odp|jpg|jpeg|png|bmp|gif|tif|tiff|webp)$' then
+  if lower(reverse(split_part(reverse(coalesce(p_file_name, '')), '.', 1))) not in ('pdf','doc','docx','odt','rtf','txt','xls','xlsx','ods','csv','ppt','pptx','odp','jpg','jpeg','png','bmp','gif','tif','tiff','webp') then
     raise exception 'Unsupported file type. Upload PDF, Word, Excel, PowerPoint, OpenDocument, RTF, TXT, CSV, or a supported image.';
   end if;
 
