@@ -2,7 +2,15 @@
 
 This process runs on the Windows/Linux computer that can reach the HP M126nw. It polls Supabase for `approved` jobs, downloads the private PDF, prints it through the computer's configured printer, and changes the job to `printed` or `failed`.
 
-## Windows
+## Windows EXE (no Python required)
+1. Extract the `CloudPrintAgent-Windows` ZIP to a folder you control.
+2. Copy `CloudPrintAgent.env.example` and rename the copy to `.env` (make sure Windows does not append `.txt`).
+3. Open `.env` in Notepad and fill in `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and `PRINTER_NAME`. Use the exact Windows queue name; for this setup it is `HP LaserJet Pro MFP M126nw`.
+4. Save `.env` beside `CloudPrintAgent.exe`, then double-click `CloudPrintAgent.exe`. Keep its console window open while printing.
+
+The `.env` file contains a secret key. Do not upload it or share it.
+
+## Windows with Python
 1. Install Python 3.11+.
 2. Install the HP printer driver and make sure a PDF can be printed manually.
 3. Open PowerShell in the `printer-agent` folder.
@@ -14,7 +22,7 @@ This process runs on the Windows/Linux computer that can reach the HP M126nw. It
 6. Open `.env` and fill in `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and `PRINTER_NAME`.
 7. Run `python agent.py`.
 
-The agent now loads `.env` from its own folder, so it works even if PowerShell is started from another directory. If configuration is missing, it shows a clear configuration error instead of a Python `KeyError`.
+The Python agent loads `.env` from its source folder. The packaged EXE loads `.env` from the folder beside the EXE. If configuration is missing, it shows a clear configuration error instead of a Python `KeyError`.
 
 ### Finding the printer name
 
