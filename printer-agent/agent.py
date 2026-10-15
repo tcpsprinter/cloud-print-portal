@@ -37,16 +37,21 @@ def db(method, path, **kwargs):
     return r.json() if r.content else None
 
 
-def signed_url(path):
-    r = requests.post(
-        f'{URL}/storage/v1/object/sign/print-files/{path.lstrip("/")}',
+def download_pdf(path):
+    """Download the private Storage object using the agent's service key.
+
+    This avoids depending on signed-URL behavior and works with objects stored
+    under paths such as public/<uuid>-<filename>. The service key never leaves
+    the local printer agent.
+    """
+    clean_path = path.lstrip('/')
+    r = requests.get(
+        f'{URL}/storage/v1/object/print-files/{clean_path}',
         headers=H,
-        json={'expiresIn': 300},
-        timeout=30,
+        timeout=60,
     )
     r.raise_for_status()
-    data = r.json()
-    return URL + data['signedURL'] if data['signedURL'].startswith('/') else data['signedURL']
+    return r.content
 
 
 def find_sumatra():
@@ -120,10 +125,8 @@ def main():
                 if not claimed:
                     continue
                 try:
-                    u = signed_url(job['file_path'])
-                    pdf = requests.get(u, timeout=60)
-                    pdf.raise_for_status()
-                    print_pdf(pdf.content, int(job.get('copies') or 1))
+                    pdf = download_pdf(job['file_path'])
+                    print_pdf(pdf, int(job.get('copies') or 1))
                     db(
                         'PATCH',
                         f'print_jobs?id=eq.{jid}&status=eq.printing',
