@@ -14,7 +14,7 @@ export async function GET(req: Request) {
 
   const {data, error} = await db()
     .from('print_jobs')
-    .select('id,user_name,file_name,file_path,copies,status,created_at,expires_at')
+    .select('id,user_name,file_name,file_path,copies,status,failure_reason,created_at,expires_at')
     .order('created_at', {ascending: false})
     .limit(100)
 
@@ -33,7 +33,7 @@ export async function PATCH(req: Request) {
 
     const {data, error} = await db()
       .from('print_jobs')
-      .update({status})
+      .update({status, failure_reason: null})
       .eq('id', id)
       .eq('status', 'pending')
       .select('id,status')
