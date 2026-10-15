@@ -3,10 +3,22 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
-URL = os.environ['SUPABASE_URL'].rstrip('/')
-KEY = os.environ['SUPABASE_SERVICE_KEY']
-PRINTER = os.environ['PRINTER_NAME']
+ENV_FILE = Path(__file__).resolve().parent / '.env'
+load_dotenv(ENV_FILE)
+
+
+def required_env(name):
+    value = os.getenv(name, '').strip()
+    if not value:
+        raise RuntimeError(
+            f'Missing {name}. Create {ENV_FILE} from .env.example and fill in your Supabase/printer settings.'
+        )
+    return value
+
+
+URL = required_env('SUPABASE_URL').rstrip('/')
+KEY = required_env('SUPABASE_SERVICE_KEY')
+PRINTER = required_env('PRINTER_NAME')
 POLL = float(os.getenv('POLL_SECONDS', '8'))
 PRINT_WAIT = int(os.getenv('PRINT_WAIT_SECONDS', '15'))
 SUMATRA_PDF = os.getenv('SUMATRA_PDF', '').strip()
@@ -55,8 +67,6 @@ def print_pdf(pdf, copies):
 
     try:
         if platform.system() == 'Windows':
-            # Prefer SumatraPDF when installed: it prints directly to the named
-            # printer and does not depend on a fragile PDF-app file association.
             sumatra = find_sumatra()
             if sumatra:
                 subprocess.run(
@@ -65,7 +75,6 @@ def print_pdf(pdf, copies):
                     timeout=120,
                 )
             else:
-                # Built-in fallback. This uses Windows' registered Print verb.
                 ps_path = p.replace("'", "''")
                 command = (
                     f"$p=Start-Process -LiteralPath '{ps_path}' -Verb Print -PassThru -Wait; "
@@ -76,8 +85,6 @@ def print_pdf(pdf, copies):
                     check=True,
                     timeout=120,
                 )
-                # Some PDF viewers hand the document to the spooler and exit
-                # immediately. Give the spooler time to consume the temp file.
                 time.sleep(PRINT_WAIT)
         else:
             subprocess.run(
@@ -139,4 +146,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except RuntimeError as exc:
+        print(f'CONFIGURATION ERROR: {exc}')
+        print(f'Expected config file: {ENV_FILE}')
+        print('Copy .env.example to .env, fill in SUPABASE_URL, SUPABASE_SERVICE_KEY, and PRINTER_NAME, then run python agent.py.')
+        raise SystemExit(1)
