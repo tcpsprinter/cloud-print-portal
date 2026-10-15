@@ -34,7 +34,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item dist/CloudPrintAgent.exe package/CloudPrintAgent.exe
-          Copy-Item printer-agent/.env.example package/.env.example
+          Copy-Item printer-agent/.env.example package/CloudPrintAgent.env.example
           Copy-Item printer-agent/README.md package/README.md
 
       - name: Upload Windows agent
