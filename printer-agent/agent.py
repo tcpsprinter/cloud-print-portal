@@ -1,4 +1,4 @@
-import os, platform, subprocess, tempfile, time, sys
+import os, platform, subprocess, tempfile, time, sys, shutil
 from pathlib import Path
 import requests
 from dotenv import load_dotenv
@@ -48,6 +48,101 @@ def download_pdf(path):
     )
     r.raise_for_status()
     return r.content
+
+
+SUPPORTED_OFFICE_EXTENSIONS = {
+    '.doc', '.docx', '.odt', '.rtf',
+    '.xls', '.xlsx', '.ods', '.csv',
+    '.ppt', '.pptx', '.odp',
+}
+SUPPORTED_IMAGE_EXTENSIONS = {
+    '.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tif', '.tiff', '.webp',
+}
+SUPPORTED_EXTENSIONS = SUPPORTED_OFFICE_EXTENSIONS | SUPPORTED_IMAGE_EXTENSIONS | {'.pdf', '.txt'}
+
+
+def find_libreoffice():
+    """Return a LibreOffice executable path, if installed."""
+    candidates = [
+        shutil.which('soffice'),
+        shutil.which('soffice.exe'),
+        str(Path(os.getenv('PROGRAMFILES', 'C:/Program Files')) / 'LibreOffice' / 'program' / 'soffice.exe'),
+        str(Path(os.getenv('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'LibreOffice' / 'program' / 'soffice.exe'),
+    ]
+    return next((p for p in candidates if p and Path(p).is_file()), None)
+
+
+def convert_to_pdf(file_bytes, file_name):
+    """Convert an allowed uploaded document/image to PDF bytes for the print pipeline."""
+    extension = Path(file_name).suffix.lower()
+    if extension not in SUPPORTED_EXTENSIONS:
+        raise RuntimeError(f'Unsupported file format: {extension or "(no extension)"}')
+
+    if extension == '.pdf':
+        return file_bytes
+
+    with tempfile.TemporaryDirectory(prefix='cloudprint-convert-') as folder:
+        workdir = Path(folder)
+        source = workdir / ('input' + extension)
+        source.write_bytes(file_bytes)
+        output = workdir / 'input.pdf'
+
+        if extension in SUPPORTED_IMAGE_EXTENSIONS:
+            from PIL import Image, ImageOps
+            with Image.open(source) as image:
+                frames = []
+                try:
+                    while True:
+                        frame = ImageOps.exif_transpose(image.copy()).convert('RGB')
+                        frames.append(frame)
+                        image.seek(image.tell() + 1)
+                except EOFError:
+                    pass
+                if not frames:
+                    raise RuntimeError('The uploaded image could not be read.')
+                frames[0].save(output, 'PDF', save_all=True, append_images=frames[1:])
+                for frame in frames:
+                    frame.close()
+
+        elif extension == '.txt':
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas
+            page = canvas.Canvas(str(output), pagesize=A4)
+            page_width, page_height = A4
+            left, top, line_height = 42, page_height - 48, 14
+            y = top
+            text = file_bytes.decode('utf-8-sig', errors='replace')
+            for raw_line in text.splitlines() or ['']:
+                # Wrap long lines and replace characters unsupported by ReportLab's built-in font.
+                line = raw_line.expandtabs(4)
+                chunks = [line[i:i + 105] for i in range(0, max(len(line), 1), 105)]
+                for chunk in chunks:
+                    if y < 42:
+                        page.showPage()
+                        y = top
+                    safe = chunk.encode('cp1252', errors='replace').decode('cp1252')
+                    page.drawString(left, y, safe)
+                    y -= line_height
+            page.save()
+
+        else:
+            office = find_libreoffice()
+            if not office:
+                raise RuntimeError(
+                    f'{extension} files require LibreOffice on the printer computer. '
+                    'Install LibreOffice, then restart CloudPrintAgent.'
+                )
+            result = subprocess.run(
+                [office, '--headless', '--convert-to', 'pdf', '--outdir', str(workdir), str(source)],
+                capture_output=True, text=True, timeout=180,
+            )
+            if result.returncode != 0 or not output.is_file():
+                detail = (result.stderr or result.stdout or 'LibreOffice did not create a PDF').strip()
+                raise RuntimeError(f'Could not convert {extension} to PDF: {detail[:500]}')
+
+        if not output.is_file():
+            raise RuntimeError(f'Conversion did not create a PDF for {file_name}.')
+        return output.read_bytes()
 
 
 def find_sumatra():
